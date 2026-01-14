@@ -6,9 +6,13 @@ import re
 
 # --- ၁။ CONFIG & SECRETS ---
 # Secrets ထဲက အချက်အလက်များကို ခေါ်ယူခြင်း
-HF_TOKEN = st.secrets["HF_TOKEN"]
-ADMIN_USER = st.secrets["ADMIN_USER"]
-ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
+try:
+    HF_TOKEN = st.secrets["HF_TOKEN"]
+    ADMIN_USER = st.secrets["ADMIN_USER"]
+    ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
+except:
+    st.error("Secrets များကို မတွေ့ပါ။ .streamlit/secrets.toml ဖိုင်ကို စစ်ဆေးပါ။")
+    st.stop()
 
 API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3-turbo"
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
@@ -53,7 +57,7 @@ if check_password():
             st.rerun()
 
     st.title("🎙️ AI YouTube Transcriber")
-    st.write(f"Welcome, **{ADMIN_USER}**! YouTube link ထည့်ပြီး စာသားပြောင်းလိုက်ပါ။")
+    st.write(f"Welcome, **{ADMIN_USER}**!")
 
     video_url = st.text_input("YouTube URL:", placeholder="https://www.youtube.com/watch?v=...")
 
@@ -68,7 +72,8 @@ if check_password():
                         ydl_opts = {
                             'format': 'm4a/bestaudio/best',
                             'outtmpl': temp_filename,
-                            'quiet': True
+                            'quiet': True,
+                            'noplaylist': True
                         }
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             ydl.download([video_url])
@@ -79,11 +84,7 @@ if check_password():
                         
                         if isinstance(result, dict) and "text" in result:
                             st.success("✅ အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!")
-                            
-                            # ရလဒ်ပြသခြင်း
                             st.text_area("Result Transcript:", result["text"], height=300)
-                            
-                            # Download ခလုတ်
                             st.download_button(
                                 label="📥 Download Text File",
                                 data=result["text"],
@@ -100,8 +101,8 @@ if check_password():
                         os.remove(temp_filename)
 
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    st.error(f"Error ဖြစ်သွားပါသည်: {str(e)}")
             else:
                 st.error("မှန်ကန်သော YouTube Link ထည့်ပေးပါ။")
         else:
-            st.warning("Link အ
+            st.warning("Link အရင်ထည့်ပေးပါ။")
