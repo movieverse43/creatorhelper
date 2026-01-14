@@ -1,47 +1,64 @@
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi
-import re
+import os
+import yt_dlp
+from openai import OpenAI
 
-# Page အပြင်အဆင်
-st.set_page_config(page_title="Myanmar YT Transcriber", page_icon="📝", layout="centered")
+# OpenAI API Key (ဒီနေရာမှာ သင့် Key ကို ထည့်ပါ သို့မဟုတ် Streamlit Secrets သုံးပါ)
+client = OpenAI(api_key="YOUR_OPENAI_API_KEY")
 
-st.title("📝 YouTube Transcriber")
-st.markdown("YouTube ဗီဒီယို Link ကို ထည့်လိုက်ရုံနဲ့ စာသားအဖြစ် ပြောင်းလဲပေးမှာပါ။")
-
-# YouTube ID ထုတ်ယူတဲ့ Function
-def extract_video_id(url):
-    pattern = r'(?:v=|\/)([0-9A-Za-z_-]{11})'
-    match = re.search(pattern, url)
-    return match.group(1) if match else None
-
-# Input ပိုင်း
-video_url = st.text_input("YouTube URL ကို ဒီမှာ Paste လုပ်ပါ:", placeholder="https://www.youtube.com/watch?v=...")
-
-if st.button("စာသားပြောင်းမယ်"):
-    if video_url:
-        video_id = extract_video_id(video_url)
-        if video_id:
-            with st.spinner('ခဏစောင့်ပါ... စာသားတွေ ဆွဲယူနေပါတယ်...'):
-                try:
-                    # Transcript ဆွဲယူခြင်း
-                    transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                    full_text = " ".join([t['text'] for t in transcript])
-                    
-                    st.success("ပြီးပါပြီ!")
-                    
-                    # ရလာတဲ့စာသားကို ပြသခြင်း
-                    st.text_area("ရလဒ် (Transcript):", full_text, height=300)
-                    
-                    # Download ခလုတ်
-                    st.download_button(
-                        label="စာသားဖိုင် (Text File) အနေနဲ့ သိမ်းမယ်",
-                        data=full_text,
-                        file_name="transcript.txt",
-                        mime="text/plain"
-                    )
-                except Exception as e:
-                    st.error("Error: ဒီဗီဒီယိုမှာ Transcript မရှိပါဘူး (သို့မဟုတ်) ပိတ်ထားပါတယ်။")
+def check_password():
+    def password_entered():
+        if st.session_state["username"] == "admin" and st.session_state["password"] == "12345":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+            del st.session_state["username"]
         else:
-            st.error("မှန်ကန်တဲ့ YouTube Link တစ်ခု ထည့်ပေးပါ။")
-    else:
-        st.warning("Link အရင်ထည့်ပေးပါ။")
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Username", on_change=password_entered, key="username")
+        st.text_input("Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Username", on_change=password_entered, key="username")
+        st.text_input("Password", type="password", on_change=password_entered, key="password")
+        st.error("😕 Username သို့မဟုတ် Password မှားနေပါတယ်။")
+        return False
+    return True
+
+def download_audio(link):
+    ydl_opts = {
+        'format': 'm4a/bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'm4a',
+        }],
+        'outtmpl': 'temp_audio.%(ext)s',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([link])
+    return "temp_audio.m4a"
+
+if check_password():
+    st.title("📝 AI YouTube Transcriber (Whisper)")
+    video_url = st.text_input("YouTube URL ကို ထည့်ပါ:")
+
+    if st.button("AI နဲ့ စာသားပြောင်းမယ်"):
+        if video_url:
+            try:
+                with st.spinner('ဗီဒီယိုမှ အသံကို ဆွဲယူနေသည်...'):
+                    audio_file = download_audio(video_url)
+                
+                with st.spinner('Whisper AI က စာသားပြောင်းပေးနေသည်...'):
+                    with open(audio_file, "rb") as f:
+                        transcript = client.audio.transcriptions.create(
+                            model="whisper-1", 
+                            file=f
+                        )
+                    st.success("အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!")
+                    st.text_area("Result:", transcript.text, height=300)
+                    
+                    # File ပြန်ဖျက်ခြင်း
+                    os.remove(audio_file)
+            except Exception as e:
+                st.error(f"အမှားတစ်ခုရှိနေပါသည်: {e}")
