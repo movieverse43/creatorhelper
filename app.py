@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import time
 
 # --- ၁။ CONFIG & SECRETS ---
 try:
@@ -8,7 +9,7 @@ try:
     ADMIN_USER = st.secrets["ADMIN_USER"]
     ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 except:
-    st.error("Secrets များကို မတွေ့ပါ။ .streamlit/secrets.toml ကို စစ်ဆေးပါ။")
+    st.error("Secrets များကို မတွေ့ပါ။ Streamlit Settings တွင် Secrets များ ထည့်သွင်းပါ။")
     st.stop()
 
 API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3-turbo"
@@ -32,10 +33,22 @@ def check_password():
         return False
     return True
 
-# --- ၃။ AI QUERY FUNCTION ---
+# --- ၃။ AI QUERY FUNCTION (Improved) ---
 def query_whisper(data):
-    response = requests.post(API_URL, headers=headers, data=data)
-    return response.json()
+    # Model လေးနေရင် အကြိမ်ကြိမ် ပြန်ကြိုးစားမည့် logic
+    for i in range(3): 
+        response = requests.post(API_URL, headers=headers, data=data)
+        
+        # အကယ်၍ JSON မဟုတ်ဘဲ အခြား error တက်လာရင်
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 503: # Model Loading ဖြစ်နေရင်
+            st.info("AI Model ကို စက်နှိုးနေပါသည် (Loading)... ၂၀ စက္ကန့်ခန့် စောင့်ပေးပါ။")
+            time.sleep(20)
+            continue
+        else:
+            return {"error": f"Server Error: {response.status_code} - {response.text}"}
+    return {"error": "AI Model အလုပ်လုပ်ရန် အချိန်ကြာမြင့်နေပါသည်။ ခဏနေမှ ပြန်စမ်းကြည့်ပါ။"}
 
 # --- ၄။ MAIN APP ---
 if check_password():
@@ -46,41 +59,31 @@ if check_password():
             st.rerun()
 
     st.title("🎙️ AI Audio Transcriber")
-    st.write(f"Welcome, **{ADMIN_USER}**! အသံဖိုင် (သို့မဟုတ်) ဗီဒီယိုဖိုင် တင်ပေးပါ။")
+    st.write(f"Welcome, **{ADMIN_USER}**!")
 
-    # File Uploader (MP3, WAV, M4A, MP4 လက်ခံသည်)
-    uploaded_file = st.file_uploader("ဖိုင်ရွေးချယ်ပါ (Max: 25MB)", type=["mp3", "wav", "m4a", "mp4"])
+    # File Uploader
+    uploaded_file = st.file_uploader("အသံဖိုင် (သို့) ဗီဒီယိုဖိုင် တင်ပါ", type=["mp3", "wav", "m4a", "mp4"])
 
     if uploaded_file is not None:
-        st.audio(uploaded_file) # တင်ထားတဲ့ဖိုင်ကို ပြန်နားထောင်လို့ရအောင်
+        st.audio(uploaded_file)
 
         if st.button("AI နဲ့ စာသားပြောင်းမယ်"):
             try:
-                with st.spinner('AI က စာသားပြောင်းပေးနေသည်... ခေတ္တစောင့်ပါ...'):
-                    # Upload တင်ထားတဲ့ဖိုင်ကို ဖတ်ခြင်း
+                with st.spinner('AI က စာသားပြောင်းပေးနေသည်...'):
+                    # ဖိုင်ကို ဖတ်ခြင်း
                     file_bytes = uploaded_file.read()
                     
-                    # AI ဆီ ပို့ခြင်း
+                    # API ကို ခေါ်ခြင်း
                     result = query_whisper(file_bytes)
                     
                     if isinstance(result, dict) and "text" in result:
                         st.success("✅ အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!")
-                        
-                        # ရလဒ်ပြသခြင်း
-                        transcript_text = result["text"]
-                        st.text_area("Result Transcript:", transcript_text, height=300)
-                        
-                        # Download ခလုတ်
-                        st.download_button(
-                            label="📥 Download Text File",
-                            data=transcript_text,
-                            file_name=f"transcript_{uploaded_file.name}.txt",
-                            mime="text/plain"
-                        )
+                        st.text_area("Result Transcript:", result["text"], height=300)
+                        st.download_button("📥 Download Result", result["text"], file_name="transcript.txt")
                     elif isinstance(result, dict) and "error" in result:
                         st.error(f"AI Error: {result['error']}")
                     else:
-                        st.error("AI Busy ဖြစ်နေပါသည်။ ခဏနေ ပြန်စမ်းကြည့်ပါ။")
+                        st.error("မထင်မှတ်ထားသော အမှားတစ်ခု ဖြစ်ပေါ်ခဲ့ပါသည်။")
 
             except Exception as e:
-                st.error(f"Error ဖြစ်သွားပါသည်: {str(e)}")
+                st.error(f"Error: {str(e)}")
