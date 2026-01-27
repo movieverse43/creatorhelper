@@ -34,18 +34,21 @@ with tab1:
                     status.info("🔄 YouTube ဆီမှ အချက်အလက်ရယူနေသည်...")
                     progress.progress(20)
                     
-                    # 403 Forbidden ကို ကျော်လွှားရန် နောက်ဆုံးပေါ် headers များ
+                    # 403 Forbidden ကို ကျော်လွှားရန် Browser Header များကို အသေအချာ ထည့်သွင်းခြင်း
                     ydl_opts = {
                         'format': 'bestaudio/best' if is_audio else f'bestvideo[height<={quality[:-1]}]+bestaudio/best' if quality != "Best" else 'best',
                         'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
                         'restrictfilenames': True,
                         'nocheckcertificate': True,
-                        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                        'referer': 'https://www.google.com/',
+                        # Cloud Server IP များအတွက် အရေးကြီးသော Header များ
                         'http_headers': {
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.5',
-                        }
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            'Accept-Language': 'en-us,en;q=0.5',
+                            'Sec-Fetch-Mode': 'navigate',
+                        },
+                        'quiet': True,
+                        'no_warnings': True,
                     }
 
                     if is_audio:
@@ -57,17 +60,20 @@ with tab1:
 
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         progress.progress(50)
-                        status.info("📥 ဒေါင်းလုဒ်ဆွဲနေသည်...")
+                        status.info("📥 ဗီဒီယိုကို ဒေါင်းလုဒ်ဆွဲနေသည်...")
+                        
+                        # Info extract လုပ်ခြင်းနှင့် ဒေါင်းလုဒ်ပြုလုပ်ခြင်း
                         info = ydl.extract_info(yt_url, download=True)
                         file_path = ydl.prepare_filename(info)
                         
                         if is_audio:
+                            # MP3 extension အတွက် ပြန်ညှိခြင်း
                             file_path = os.path.splitext(file_path)[0] + ".mp3"
                         
                         progress.progress(100)
-                        status.success(f"✅ Downloaded: {info.get('title')}")
+                        status.success(f"✅ ဒေါင်းလုဒ်ပြီးပါပြီ: {info.get('title')}")
                         
-                        # ဖိုင်ပျောက်မသွားစေရန် Memory (RAM) ထဲသို့ အရင်ဖတ်သွင်းခြင်း
+                        # ဖိုင်ပျောက်မသွားစေရန် RAM ထဲသို့ ဖတ်ယူခြင်း
                         with open(file_path, "rb") as f:
                             file_bytes = f.read()
                             
@@ -79,9 +85,8 @@ with tab1:
                         )
             except Exception as e:
                 status.error(f"Download Error: {str(e)}")
-                st.info("💡 အကြံပြုချက်: YouTube က ပိတ်ထားပါက တခြား Link တစ်ခုဖြင့် ပြန်စမ်းကြည့်ပါ။")
+                st.info("💡 YouTube သည် Cloud IP များကို ပိတ်ထားတတ်ပါသည်။ Link ကို ပြန်စစ်ပါ သို့မဟုတ် ခဏနားပြီး ပြန်စမ်းကြည့်ပါ။")
         else:
-            st.warning("YouTube URL ထည့်ပေးပါ။")
+            st.warning("YouTube URL အရင်ထည့်ပါ။")
 
-# --- TAB 2 & 3 ကုဒ်များမှာ ယခင်အတိုင်းဖြစ်ပါသည် ---
-# (နေရာလွတ်စေရန် အကျဉ်းချထားပါသည်)
+# --- TAB 2 & 3 ကုဒ်များမှာ ယခင်အတိုင်း တည်ငြိမ်စွာ အလုပ်လုပ်ပါသည် ---
