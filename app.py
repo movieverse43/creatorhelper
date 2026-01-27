@@ -13,7 +13,7 @@ st.title("🎬 Creator Helper Toolkit")
 # Tab များကို ကြေညာခြင်း
 tab1, tab2, tab3 = st.tabs(["📥 YouTube Downloader", "🔊 TTS (Text to Audio)", "🎬 Dubbing"])
 
-# --- TAB 1: YOUTUBE DOWNLOADER (Fixed Filename Error) ---
+# --- TAB 1: YOUTUBE DOWNLOADER ---
 with tab1:
     st.subheader("YouTube Video/Audio Downloader")
     yt_url = st.text_input("YouTube URL:", placeholder="https://www.youtube.com/watch?v=...", key="yt_dl_url")
@@ -31,12 +31,11 @@ with tab1:
                     with tempfile.TemporaryDirectory() as tmpdir:
                         is_audio = dl_type == "Audio (MP3)"
                         
-                        # Special characters ကြောင့် Error မတက်စေရန် ဖိုင်နာမည်ကို ပုံသေပေးခြင်း
-                        output_template = os.path.join(tmpdir, 'dl_file.%(ext)s')
-
+                        # restrictfilenames: True က ဖိုင်နာမည်ကို Windows/Linux အကုန်လုံး ဖတ်လို့ရအောင် ပြင်ပေးပါသည်
                         ydl_opts = {
                             'format': 'bestaudio/best' if is_audio else f'bestvideo[height<={quality[:-1]}]+bestaudio/best' if quality != "Best" else 'best',
-                            'outtmpl': output_template,
+                            'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
+                            'restrictfilenames': True, 
                             'nocheckcertificate': True,
                             'ignoreerrors': True,
                             'no_warnings': True,
@@ -55,11 +54,10 @@ with tab1:
                             info = ydl.extract_info(yt_url, download=True)
                             video_title = info.get('title', 'video')
                             
-                            # Temp folder ထဲရှိ ဒေါင်းလုဒ်ဆွဲထားသော ဖိုင်ကို တိုက်ရိုက်ရှာဖွေခြင်း
-                            downloaded_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir)]
-                            
-                            if downloaded_files:
-                                final_path = downloaded_files[0]
+                            # Folder ထဲရှိ ဖိုင်ကို တိုက်ရိုက်ရှာဖွေခြင်း
+                            files = [f for f in os.listdir(tmpdir)]
+                            if files:
+                                final_path = os.path.join(tmpdir, files[0])
                                 extension = ".mp3" if is_audio else ".mp4"
                                 
                                 st.success(f"✅ Downloaded: {video_title}")
@@ -67,7 +65,7 @@ with tab1:
                                     st.download_button(
                                         label="💾 Save to Computer",
                                         data=f,
-                                        file_name=f"{video_title}{extension}",
+                                        file_name=f"downloaded_file{extension}",
                                         mime="audio/mpeg" if is_audio else "video/mp4"
                                     )
                 except Exception as e:
@@ -75,7 +73,7 @@ with tab1:
         else:
             st.warning("YouTube URL ထည့်ပေးပါ။")
 
-# --- TAB 2: TTS (Edge-TTS with Speed & Volume Control) ---
+# --- TAB 2: TTS ---
 with tab2:
     st.subheader("Edge-TTS (Myanmar/English)")
     tts_text = st.text_area("အသံထွက်ရန် စာသားများ:", height=150, key="t2_in")
@@ -97,18 +95,18 @@ with tab2:
             asyncio.run(run_tts())
             st.audio(out_tts)
 
-# --- TAB 3: DUBBING (Auto-Sync Speed) ---
+# --- TAB 3: DUBBING ---
 with tab3:
     st.subheader("Auto-Sync Video Dubbing")
     dub_v = st.file_uploader("Video ဖိုင်တင်ပါ", type=["mp4", "mov"])
-    dub_text = st.text_area("Dubbing လုပ်မည့် စာသားများ:", height=150)
+    dub_text_area = st.text_area("Dubbing လုပ်မည့် စာသားများ:", height=150)
     
     if st.button("🎬 Start Dubbing", type="primary"):
-        if dub_v and dub_text:
+        if dub_v and dub_text_area:
             with st.spinner("Processing Dubbing..."):
                 try:
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        v_path = os.path.join(tmpdir, "v.mp4")
+                        v_path = os.path.join(tmpdir, "input.mp4")
                         with open(v_path, "wb") as f: f.write(dub_v.getbuffer())
                         
                         clip = VideoFileClip(v_path)
@@ -116,28 +114,26 @@ with tab3:
                         
                         temp_a = os.path.join(tmpdir, "t.mp3")
                         async def get_initial_a():
-                            await edge_tts.Communicate(dub_text, "my-MM-ThihaNeural").save(temp_a)
+                            await edge_tts.Communicate(dub_text_area, "my-MM-ThihaNeural").save(temp_a)
                         asyncio.run(get_initial_a())
                         
                         with AudioFileClip(temp_a) as audio_clip:
                             a_dur = audio_clip.duration
-                            # Speed calculation (-25% to +45%)
+                            # Speed calculation
                             speed_val = int(max(min((a_dur / v_dur - 1) * 100, 45), -25))
-                            st.write(f"Syncing Speed: {speed_val}%")
+                            st.info(f"ဗီဒီယိုကြာချိန်: {v_dur:.2f}s | Sync Speed: {speed_val}%")
                             
                             final_a = os.path.join(tmpdir, "f.mp3")
                             async def get_final_a():
-                                await edge_tts.Communicate(dub_text, "my-MM-ThihaNeural", rate=f"{speed_val:+d}%").save(final_a)
+                                await edge_tts.Communicate(dub_text_area, "my-MM-ThihaNeural", rate=f"{speed_val:+d}%").save(final_a)
                             asyncio.run(get_final_a())
                             
                             final_out = "dubbed_video.mp4"
                             with AudioFileClip(final_a) as new_audio:
-                                # MoviePy v2 compatibility
                                 f_clip = clip.with_audio(new_audio) if hasattr(clip, 'with_audio') else clip.set_audio(new_audio)
                                 f_clip.write_videofile(final_out, codec="libx264", audio_codec="aac")
                                 f_clip.close()
                         clip.close()
                         st.video(final_out)
-                        st.success("Dubbing အောင်မြင်ပါသည်။")
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
