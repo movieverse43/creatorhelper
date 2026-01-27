@@ -1,5 +1,4 @@
 streamlit
-yt-dlp>=2023.11.16
-requests
-youtube-transcript-api
-
+yt-dlp
+edge-tts
+moviepy
