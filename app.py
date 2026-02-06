@@ -11,13 +11,8 @@ st.set_page_config(page_title="Secure Edge TTS", page_icon="🔒", layout="cente
 # Main App (Login ဝင်ပြီးမှ မြင်ရမည့်အပိုင်း)
 # ==========================================
 
-st.title("🎵 Simple Edge TTS")
+st.title("Simple Edge TTS")
 st.caption("Free & Unlimited (Myanmar + English)")
-
-# Logout Button
-if st.button("Log out 🔒"):
-    st.session_state['logged_in'] = False
-    st.rerun() # Refresh ပြန်လုပ်ပြီး Login စာမျက်နှာပြန်ပို့
 
 # --- Session State for Audio ---
 if 'audio_bytes' not in st.session_state:
@@ -68,7 +63,7 @@ async def generate_audio(text, voice, speed_val):
     return audio_data
 
 # Generate Button
-if st.button("Generate Audio 🔊", type="primary"):
+if st.button("Generate Audio", type="primary"):
     if not text_input.strip():
         st.warning("စာရိုက်ထည့်ပါ...")
     else:
@@ -85,9 +80,10 @@ if st.session_state['audio_bytes']:
     st.success("Success! အသံဖိုင် ရပါပြီ။")
     st.audio(st.session_state['audio_bytes'], format="audio/mp3")
     st.download_button(
-        label="Download MP3 📥",
+        label="Download MP3",
         data=st.session_state['audio_bytes'],
         file_name="tts_audio.mp3",
         mime="audio/mp3",
         key="download_btn"
     )
+
