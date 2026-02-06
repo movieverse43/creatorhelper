@@ -1,92 +1,93 @@
 import streamlit as st
-import yt_dlp
-import tempfile
-import os
-import asyncio
 import edge_tts
-from moviepy import VideoFileClip, AudioFileClip
+import asyncio
+import os
 
-# --- Page Config ---
-st.set_page_config(page_title="Creator Helper Toolkit", page_icon="🎬", layout="wide")
-st.title("🎬 Creator Helper Toolkit")
+# 1. Page Config
+st.set_page_config(page_title="Secure Edge TTS", page_icon="🔒", layout="centered")
 
-tab1, tab2, tab3 = st.tabs(["📥 YouTube Downloader", "🔊 TTS", "🎬 Dubbing"])
 
-# --- TAB 1: YOUTUBE DOWNLOADER ---
-with tab1:
-    st.subheader("YouTube Downloader")
-    yt_url = st.text_input("YouTube URL:", placeholder="https://www.youtube.com/watch?v=...", key="yt_dl_url")
+# ==========================================
+# Main App (Login ဝင်ပြီးမှ မြင်ရမည့်အပိုင်း)
+# ==========================================
+
+st.title("🎵 Simple Edge TTS")
+st.caption("Free & Unlimited (Myanmar + English)")
+
+# Logout Button
+if st.button("Log out 🔒"):
+    st.session_state['logged_in'] = False
+    st.rerun() # Refresh ပြန်လုပ်ပြီး Login စာမျက်နှာပြန်ပို့
+
+# --- Session State for Audio ---
+if 'audio_bytes' not in st.session_state:
+    st.session_state['audio_bytes'] = None
+
+# --- Voice Settings ---
+language = st.radio("ဘာသာစကား (Language):", ["မြန်မာ (Myanmar)", "အင်္ဂလိပ် (English)"], horizontal=True)
+
+if language == "မြန်မာ (Myanmar)":
+    voice_options = {
+        "Thiha (Male) - သီဟ": "my-MM-ThihaNeural",
+        "Nilar (Female) - နီလာ": "my-MM-NilarNeural"
+    }
+else:
+    voice_options = {
+        "Aria (Female) - US": "en-US-AriaNeural",
+        "Christopher (Male) - US": "en-US-ChristopherNeural",
+        "Guy (Male) - US": "en-US-GuyNeural",
+        "Jenny (Female) - US": "en-US-JennyNeural",
+        "Brian (Male) - UK": "en-GB-BrianNeural",
+        "Sonia (Female) - UK": "en-GB-SoniaNeural"
+    }
+
+selected_voice_name = st.selectbox("အသံရွေးပါ (Select Voice):", list(voice_options.keys()))
+selected_voice_id = voice_options[selected_voice_name]
+
+# --- Speed Control ---
+speed = st.slider("အသံအမြန်နှုန်း (Speed):", min_value=0.5, max_value=2.0, value=1.0, step=0.1)
+
+# --- Text Input ---
+text_input = st.text_area("စာရိုက်ထည့်ပါ (Enter Text):", height=200, placeholder="ဒီမှာ စာရိုက်ပါ...")
+
+# --- Logic ---
+async def generate_audio(text, voice, speed_val):
+    percentage = int((speed_val - 1) * 100)
+    if percentage >= 0:
+        rate_str = f"+{percentage}%"
+    else:
+        rate_str = f"{percentage}%"
     
-    col_dl1, col_dl2 = st.columns(2)
-    with col_dl1:
-        dl_type = st.selectbox("Format:", ["Video (MP4)", "Audio (MP3)"])
-    with col_dl2:
-        quality = st.selectbox("Resolution:", ["Best", "720p", "480p", "360p"])
+    communicate = edge_tts.Communicate(text, voice, rate=rate_str)
+    
+    audio_data = b""
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_data += chunk["data"]
+            
+    return audio_data
 
-    if st.button("📥 Download Now", type="primary"):
-        if yt_url:
-            status = st.empty()
-            progress = st.progress(0)
+# Generate Button
+if st.button("Generate Audio 🔊", type="primary"):
+    if not text_input.strip():
+        st.warning("စာရိုက်ထည့်ပါ...")
+    else:
+        with st.spinner("Generating..."):
             try:
-                is_audio = dl_type == "Audio (MP3)"
-                
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    status.info("🔄 YouTube ဆီမှ အချက်အလက်ရယူနေသည်...")
-                    progress.progress(20)
-                    
-                    # 403 Forbidden ကို ကျော်လွှားရန် Browser Header များကို အသေအချာ ထည့်သွင်းခြင်း
-                    ydl_opts = {
-                        'format': 'bestaudio/best' if is_audio else f'bestvideo[height<={quality[:-1]}]+bestaudio/best' if quality != "Best" else 'best',
-                        'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
-                        'restrictfilenames': True,
-                        'nocheckcertificate': True,
-                        # Cloud Server IP များအတွက် အရေးကြီးသော Header များ
-                        'http_headers': {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                            'Accept-Language': 'en-us,en;q=0.5',
-                            'Sec-Fetch-Mode': 'navigate',
-                        },
-                        'quiet': True,
-                        'no_warnings': True,
-                    }
-
-                    if is_audio:
-                        ydl_opts['postprocessors'] = [{
-                            'key': 'FFmpegExtractAudio',
-                            'preferredcodec': 'mp3',
-                            'preferredquality': '192',
-                        }]
-
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        progress.progress(50)
-                        status.info("📥 ဗီဒီယိုကို ဒေါင်းလုဒ်ဆွဲနေသည်...")
-                        
-                        # Info extract လုပ်ခြင်းနှင့် ဒေါင်းလုဒ်ပြုလုပ်ခြင်း
-                        info = ydl.extract_info(yt_url, download=True)
-                        file_path = ydl.prepare_filename(info)
-                        
-                        if is_audio:
-                            # MP3 extension အတွက် ပြန်ညှိခြင်း
-                            file_path = os.path.splitext(file_path)[0] + ".mp3"
-                        
-                        progress.progress(100)
-                        status.success(f"✅ ဒေါင်းလုဒ်ပြီးပါပြီ: {info.get('title')}")
-                        
-                        # ဖိုင်ပျောက်မသွားစေရန် RAM ထဲသို့ ဖတ်ယူခြင်း
-                        with open(file_path, "rb") as f:
-                            file_bytes = f.read()
-                            
-                        st.download_button(
-                            label="💾 Save to Computer (ဒါကိုနှိပ်ပါ)",
-                            data=file_bytes,
-                            file_name=os.path.basename(file_path),
-                            mime="audio/mpeg" if is_audio else "video/mp4"
-                        )
+                audio_data = asyncio.run(generate_audio(text_input, selected_voice_id, speed))
+                st.session_state['audio_bytes'] = audio_data
             except Exception as e:
-                status.error(f"Download Error: {str(e)}")
-                st.info("💡 YouTube သည် Cloud IP များကို ပိတ်ထားတတ်ပါသည်။ Link ကို ပြန်စစ်ပါ သို့မဟုတ် ခဏနားပြီး ပြန်စမ်းကြည့်ပါ။")
-        else:
-            st.warning("YouTube URL အရင်ထည့်ပါ။")
+                st.error(f"Error: {e}")
 
-# --- TAB 2 & 3 ကုဒ်များမှာ ယခင်အတိုင်း တည်ငြိမ်စွာ အလုပ်လုပ်ပါသည် ---
+# --- Display Result ---
+if st.session_state['audio_bytes']:
+    st.markdown("---")
+    st.success("Success! အသံဖိုင် ရပါပြီ။")
+    st.audio(st.session_state['audio_bytes'], format="audio/mp3")
+    st.download_button(
+        label="Download MP3 📥",
+        data=st.session_state['audio_bytes'],
+        file_name="tts_audio.mp3",
+        mime="audio/mp3",
+        key="download_btn"
+    )
